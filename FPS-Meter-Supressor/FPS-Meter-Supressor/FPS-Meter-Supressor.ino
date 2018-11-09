@@ -5,10 +5,13 @@
 #include <interrupt.h>
 #include <Arduino.h>
 
-#define max_timer_overflow 2441 //10 seconden
-uint16_t timer_overflow = 0;
+#define max_timer_0_overflow 61		// 1 Seconden
+#define max_timer_1_overflow 2441	//10 seconden
+float timer_0_overflow = 0;
+uint16_t timer_1_overflow = 0;
 uint16_t counter_value = 0;
 float fps = 0;
+float rof = 0;
 
 int main(void) {
 	init();
@@ -25,6 +28,20 @@ int main(void) {
 }
 
 void setup_timers() {
+	// TIMER 0
+	TCCR0A |= (1 << WGM01); // CTC Mode
+	
+	OCR0A = 0xFF;			// Overflow
+	
+	TCCR0B &= (0 << CS00);
+	TCCR0B &= (0 << CS01);
+	TCCR0B &= (0 << CS02);	// Stop timer 0
+
+	TCNT0 = 0;
+	
+	TIMSK0 |= (1 << OCIE0A);    //Set the ISR COMPA vect
+
+	// TIMER 1
 	OCR1A = 0xFFFF;				// Timer 1 overflow
 	
 	TCCR1A &= (0 << WGM10);
@@ -41,9 +58,19 @@ void setup_timers() {
 	TIMSK1 |= (1 << OCIE1A);	// Timer 1 Set interrupt on compare match
 }
 
+void start_timer_0() {
+	TCCR0B |= (1 << CS00);
+	TCCR0B |= (1 << CS02);		// Start timer 0
+}
+
+void stop_timer_0() {
+	TCCR0B &= (0 << CS00);
+	TCCR0B &= (0 << CS01);
+	TCCR0B &= (0 << CS02);	// Stop timer 0
+}
+
 void start_timer_1() {
 	TCCR1B |= (1 << CS10);
-	
 }
 
 void stop_timer_1() {
@@ -75,8 +102,17 @@ void setup_IO() {
 // Rising edge
 ISR(INT0_vect) {
 	TCNT1 = 0;
-	start_timer_1();
-	//Serial.println("Start");
+	start_timer_1();			// FPS Timer
+	if (timer_0_overflow == 0) {// ROF Timer
+		start_timer_0();
+	} else {
+		stop_timer_0;
+		rof = 15625.0 / (TCNT0 + (timer_0_overflow * 255.0));
+		Serial.println('R');
+		Serial.println(rof);
+		TCNT0 = 0;
+		timer_0_overflow = 0;
+	}
 }
 
 // Falling edge
@@ -87,8 +123,13 @@ ISR(INT1_vect) {
 	
 	Serial.println('F');
 	if ( fps > 0) Serial.println(fps);
-	Serial.println('R');
-	Serial.println(23);
+	/*Serial.println('R');
+	Serial.println(23);*/
+}
+
+// timer0 overflow interrupt
+ISR(TIMER0_COMPA_vect) {
+	timer_0_overflow++;
 }
 
 // Timer 1 compare match
